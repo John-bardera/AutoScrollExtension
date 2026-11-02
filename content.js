@@ -15,8 +15,8 @@
 
   const SPEED_MIN = 10;
   const SPEED_MAX = 1000;
-  const SPEED_STEP = 10;
   const SPEED_ADJUST = 10; // ↑↓ 1押下あたりの変化量
+  const DT_MAX = 0.1;      // dt の上限秒(rAF 復帰時の急移動を防ぐ)
 
   // --- 送信ヘルパー --------------------------------------------------------
   // background が無い場面(拡張再読み込み直後など)でも落ちないように握り潰す。
@@ -57,7 +57,7 @@
 
   const tick = (now) => {
     if (!running) return;
-    const dt = (now - lastTime) / 1000;
+    const dt = Math.min((now - lastTime) / 1000, DT_MAX);
     lastTime = now;
     residual += speed * dt;
     const whole = Math.floor(residual);
@@ -103,12 +103,15 @@
   };
 
   // --- メッセージ受信 ------------------------------------------------------
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'SCROLL_START') {
       startScroll(msg.speed);
     } else if (msg.type === 'SCROLL_STOP') {
       stopScroll();
+    } else if (msg.type === 'SCROLL_QUERY') {
+      // background がトグル判定に使う実行状態の問い合わせ。
+      sendResponse({ running });
     }
   });
 
@@ -119,15 +122,21 @@
     const el = document.activeElement;
     if (!el) return false;
     const tag = el.tagName ? el.tagName.toLowerCase() : '';
-    return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+    return (
+      tag === 'input' ||
+      tag === 'textarea' ||
+      tag === 'select' ||
+      el.isContentEditable
+    );
   };
 
   document.addEventListener('keydown', (e) => {
     if (!running || e.isComposing || isTypingContext()) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // 修飾キー付きは素通し
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
     speed = clampSpeed(speed + (e.key === 'ArrowUp' ? SPEED_ADJUST : -SPEED_ADJUST));
-    chrome.storage.sync.set({ speed });
+    // 永続化は background が SPEED_CHANGED で行う(書き込み二重化を避ける)。
     sendToBackground({ type: 'SPEED_CHANGED', speed });
     showOverlay(`速度: ${speed} px/s`);
   });
