@@ -18,6 +18,11 @@ const START_RETRY_MAX = 10;           // 再送回数(計約3秒)
 // content script が注入される(=トグルが機能する)URL スキーム。
 const SCROLLABLE_SCHEMES = ['http:', 'https:', 'file:'];
 
+// --- 診断ログ -----------------------------------------------------------------
+// SW コンソール(arc://extensions → Auto Scroll → service worker)で
+// 経路を追跡できるようにする。Arc 等での切り分け用。
+const diag = (...args) => console.debug('[AutoScroll]', ...args);
+
 // --- 状態 ---------------------------------------------------------------------
 let active = false;        // スクロール実行中か(storage.session にミラー)
 let activeTabId = null;    // スクロール中のタブ ID(storage.session にミラー)
@@ -134,22 +139,28 @@ const startOnTab = async (tabId) => {
       return; // タブが閉じられた
     }
     const url = tab.url || '';
+    diag(`startOnTab 試行${attempt}: url=${url}`);
     if (url.startsWith('chrome-extension://')) {
+      diag('startOnTab 中断: 拡張自身の UI');
       abortStart(); // 拡張自身の UI では開始しない
       return;
     }
     // 生成直後のタブは URL が空または about:blank のことがあり、遷移を
     // 待つ必要があるため pending 扱いとする。
     if (url && url !== 'about:blank' && !isScrollableTab(tab)) {
+      diag('startOnTab 中断: 非スクロール可能な URL(サイトへのアクセス権やスキームを確認)');
       abortStart(); // chrome:// 等では開始しない
       return;
     }
     sendToTab(tabId, { type: 'SCROLL_START', speed });
     await sleep(START_RETRY_INTERVAL_MS);
     if (!active || activeTabId !== tabId) return;
-    if (await queryTabRunning(tabId)) return; // 開始を確認
+    if (await queryTabRunning(tabId)) {
+      diag(`startOnTab 確認: 開始済み(${attempt + 1} 回目)`);
+      return; // 開始を確認
+    }
   }
-  // 確認できないまま期限切れ:状態は残す(ユーザーは Alt+S で停止可能)。
+  diag('startOnTab 期限切れ: content の開始を確認できません(注入されていない可能性)');
 };
 
 const stopScroll = () => {
@@ -165,7 +176,11 @@ const stopScroll = () => {
 const toggleScroll = async () => {
   await ready;
   const tab = await getActiveTab();
-  if (!tab || !isScrollableTab(tab)) return; // chrome:// 等では何もしない
+  diag(`toggleScroll: url=${tab ? tab.url : '(タブなし)'}`);
+  if (!tab || !isScrollableTab(tab)) {
+    diag('toggleScroll 何もしない: スクロール不可能なページ');
+    return; // chrome:// 等では何もしない
+  }
   if (await queryTabRunning(tab.id)) {
     stopScroll();
   } else {
@@ -175,6 +190,7 @@ const toggleScroll = async () => {
 
 // --- キーボードコマンド(Alt+S) ---------------------------------------------------
 chrome.commands.onCommand.addListener((command) => {
+  diag(`onCommand: ${command}`);
   if (command === 'toggle-scroll') {
     toggleScroll();
   }
@@ -188,6 +204,7 @@ chrome.commands.onCommand.addListener((command) => {
 // あり、フォーカス移動は onFocusChanged が別途処理するため無視する。
 const handleTabChange = async (tabId, requireSameWindow = false) => {
   await ready;
+  diag(`handleTabChange: tabId=${tabId} requireSameWindow=${requireSameWindow} active=${active}`);
   if (!active) return;
   if (tabId === activeTabId) return; // 二重発火ガード
 
@@ -205,9 +222,15 @@ const handleTabChange = async (tabId, requireSameWindow = false) => {
     } catch (_) {
       /* スクロール中タブが消えた場合は通常の経路へ */
     }
-    if (cur && cur.windowId !== tab.windowId) return; // 別ウィンドウ:無視
+    if (cur && cur.windowId !== tab.windowId) {
+      diag('handleTabChange 無視: 別ウィンドウの活性化');
+      return; // 別ウィンドウ:無視
+    }
   }
 
+  if (tab) {
+    diag(`handleTabChange: 新タブ url=${tab.url || '(空)'}`);
+  }
   // 旧タブは必ず停止する。
   stopScroll();
   if (behavior === 'resume') {
@@ -228,6 +251,7 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 chrome.tabs.onUpdated.addListener((tabId, info) => {
   if (info.status !== 'complete') return;
   if (!active || tabId !== activeTabId) return;
+  diag(`onUpdated 再開: tabId=${tabId}`);
   startOnTab(tabId); // 冪等(二重開始ガード)+ 注入待ち再送
 });
 
