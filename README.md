@@ -15,7 +15,23 @@
 - **末尾自動停止**: ページ最下部に到達したら自動的に停止
 - **速度オーバーレイ**: 開始・停止・速度変更時に画面右下に一瞬表示
 
-## インストール(デベロッパーモード)
+## インストール
+
+### GitHub から導入する場合
+
+1. [Releases](https://github.com/John-bardera/AutoScrollExtension/releases) があれば ZIP をダウンロード、なければリポジトリをクローンする:
+
+   ```bash
+   git clone https://github.com/John-bardera/AutoScrollExtension.git
+   ```
+
+2. ZIP の場合は任意の場所に展開する
+3. 下記「デベロッパーモードで読み込む」へ進む
+
+> 更新を取り込むときは、クローンしたディレクトリで `git pull` した後、
+> `chrome://extensions` の拡張カードにある「更新」ボタン(↻)を押してください。
+
+### デベロッパーモードで読み込む
 
 1. Chrome で `chrome://extensions` を開く
 2. 右上の「デベロッパーモード」を有効にする
