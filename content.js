@@ -1,0 +1,134 @@
+// content.js — 自動スクロール本体。
+// background からの SCROLL_START / SCROLL_STOP メッセージで開始・停止する。
+// rAF ループで speed × dt を加算し、小数残差を蓄積して整数 px でのみ
+// scrollBy を発行する(丸め誤差が溜まらず速度が揺れない)。
+
+(() => {
+  'use strict';
+
+  // --- 状態 ---------------------------------------------------------------
+  let running = false;
+  let speed = 60;        // px/s
+  let residual = 0;      // 整数化できなかった小数の残差(px)
+  let lastTime = 0;
+  let rafId = null;
+
+  const SPEED_MIN = 10;
+  const SPEED_MAX = 1000;
+  const SPEED_STEP = 10;
+  const SPEED_ADJUST = 10; // ↑↓ 1押下あたりの変化量
+
+  // --- 送信ヘルパー --------------------------------------------------------
+  // background が無い場面(拡張再読み込み直後など)でも落ちないように握り潰す。
+  const sendToBackground = (msg) => {
+    try {
+      chrome.runtime.sendMessage(msg).catch(() => {});
+    } catch (_) {
+      /* 拡張コンテキスト無効化済み */
+    }
+  };
+
+  // --- オーバーレイ --------------------------------------------------------
+  let overlayEl = null;
+  let overlayTimer = null;
+
+  const showOverlay = (text, duration = 1200) => {
+    if (!overlayEl) {
+      overlayEl = document.createElement('div');
+      overlayEl.style.cssText =
+        'position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
+        'padding:6px 12px;border-radius:8px;background:rgba(20,20,20,0.75);' +
+        'color:#fff;font:13px/1.4 sans-serif;pointer-events:none;' +
+        'transition:opacity 0.4s ease;opacity:1;';
+      document.documentElement.appendChild(overlayEl);
+    }
+    overlayEl.textContent = text;
+    overlayEl.style.opacity = '1';
+    if (overlayTimer) clearTimeout(overlayTimer);
+    overlayTimer = setTimeout(() => {
+      overlayEl.style.opacity = '0';
+    }, duration);
+  };
+
+  // --- スクロール本体 ------------------------------------------------------
+  const atPageEnd = () =>
+    window.scrollY + window.innerHeight >=
+    document.documentElement.scrollHeight - 1;
+
+  const tick = (now) => {
+    if (!running) return;
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    residual += speed * dt;
+    const whole = Math.floor(residual);
+    if (whole >= 1) {
+      residual -= whole;
+      window.scrollBy(0, whole);
+    }
+    if (atPageEnd()) {
+      stopScroll();
+      showOverlay('ページ末尾で停止しました', 2000);
+      return;
+    }
+    rafId = requestAnimationFrame(tick);
+  };
+
+  const startScroll = (newSpeed) => {
+    if (running) {
+      // 二重開始ガード:速度だけ更新する
+      if (typeof newSpeed === 'number' && newSpeed !== speed) {
+        speed = newSpeed;
+      }
+      return;
+    }
+    if (typeof newSpeed === 'number') speed = newSpeed;
+    residual = 0;
+    lastTime = performance.now();
+    running = true;
+    rafId = requestAnimationFrame(tick);
+    sendToBackground({ type: 'SCROLL_STATE', active: true });
+    showOverlay(`自動スクロール開始(速度: ${speed} px/s)`);
+  };
+
+  const stopScroll = () => {
+    if (!running) return;
+    running = false;
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    residual = 0;
+    sendToBackground({ type: 'SCROLL_STATE', active: false });
+    showOverlay('自動スクロール停止');
+  };
+
+  // --- メッセージ受信 ------------------------------------------------------
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'SCROLL_START') {
+      startScroll(msg.speed);
+    } else if (msg.type === 'SCROLL_STOP') {
+      stopScroll();
+    }
+  });
+
+  // --- キーボード速度調整(スクロール中のみ) --------------------------------
+  const clampSpeed = (v) => Math.min(SPEED_MAX, Math.max(SPEED_MIN, v));
+
+  const isTypingContext = () => {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName ? el.tagName.toLowerCase() : '';
+    return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (!running || e.isComposing || isTypingContext()) return;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    speed = clampSpeed(speed + (e.key === 'ArrowUp' ? SPEED_ADJUST : -SPEED_ADJUST));
+    chrome.storage.sync.set({ speed });
+    sendToBackground({ type: 'SPEED_CHANGED', speed });
+    showOverlay(`速度: ${speed} px/s`);
+  });
+})();
