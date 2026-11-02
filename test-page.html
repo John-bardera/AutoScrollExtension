@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>自動スクロール 動作確認ページ</title>
+  <style>
+    body { font: 16px/1.8 sans-serif; max-width: 720px; margin: 0 auto; padding: 24px; }
+    section { margin-bottom: 40px; }
+    .marker { color: #b33; font-weight: bold; }
+    input[type="text"] { width: 300px; padding: 8px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>自動スクロール 動作確認ページ</h1>
+  <p>
+    拡張機能を読み込んだ状態で Alt+S を押すとスクロールが始まります。
+    見出しの番号を観測しながら、速度の変化や末尾での停止を確認してください。
+  </p>
+
+  <section>
+    <h2>01</h2>
+    <p>ここは速度確認用の平文テキストです。……</p>
+    <input type="text" placeholder="テキスト入力中は ↑↓ を無視する(確認用)" />
+  </section>
+  <section><h2>02</h2><p>速度を上げると読みにくい速度で流れます。</p></section>
+  <section><h2>03</h2><p>スライダーと ↑↓ で速度が変わるか確認します。</p></section>
+  <section><h2>04</h2><p>上矢印を押し続けると 10 px/s 刻みで遅くなります。</p></section>
+  <section><h2>05</h2><p>下矢印を押し続けると 10 px/s 刻みで速くなります。</p></section>
+  <section><h2>06</h2><p>境界値のクランプ: 最小 10 px/s、最大 1000 px/s。</p></section>
+  <section><h2>07</h2><p>オーバーレイの速度表示が変わるか観測します。</p></section>
+  <section><h2>08</h2><p>途中で Alt+S を押すと停止、もう一度で再開。</p></section>
+  <section><h2>09</h2><p>タブを切り替えると旧タブで停止します。</p></section>
+  <section><h2>10</h2><p>切り替え先のタブの挙動は popup の設定に従います。</p></section>
+  <section><h2>11</h2><p>ブラウザを再起動しても速度設定は保持されます。</p></section>
+  <section><h2>12</h2><p>もう少しでページの末尾です……。</p></section>
+  <section><h2>13</h2><p>末尾に近づくと自動で停止するはずです。</p></section>
+  <section><h2>14</h2><p class="marker">ここに来る直前で停止したら合格です。</p></section>
+
+  <footer style="margin-top:80px; padding-bottom:40px;">
+    <strong>末尾</strong> — この行の直前で自動停止すること。
+  </footer>
+</body>
+</html>
