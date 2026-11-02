@@ -77,6 +77,36 @@ const persistSession = () => {
   chrome.storage.session.set({ active, activeTabId }).catch(() => {});
 };
 
+// 拡張のインストール・更新・ブラウザ起動時に、すでに開いている全タブへ
+// content script を注入する。拡張更新後の既存タブは manifest 注入の
+// 対象外(古い content script が無効化されたまま)になるため。
+const injectIntoAllTabs = async () => {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (typeof tab.id !== 'number' || !tab.url) continue;
+      try {
+        if (!SCROLLABLE_SCHEMES.includes(new URL(tab.url).protocol)) continue;
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: false },
+          files: ['i18n.js', 'content.js'],
+        });
+      } catch (_) {
+        /* 注入不可のタブ(chrome:// 等、破棄済み)は無視 */
+      }
+    }
+  } catch (_) {
+    /* 握り潰し */
+  }
+};
+
+chrome.runtime.onInstalled.addListener(() => {
+  injectIntoAllTabs();
+});
+chrome.runtime.onStartup.addListener(() => {
+  injectIntoAllTabs();
+});
+
 // storage.sync への速度保存はデバウンスする(書き込みレート制限対策)。
 let saveTimer = null;
 const scheduleSpeedSave = () => {

@@ -32,7 +32,7 @@ const clampSpeed = (v) =>
 const applyLanguage = (lang) => {
   document.documentElement.lang = lang;
   for (const el of document.querySelectorAll('[data-i18n]')) {
-    el.textContent = t(lang, el.dataset.i18n);
+    el.textContent = AutoScrollT(lang, el.dataset.i18n);
   }
 };
 
@@ -40,8 +40,8 @@ const applyState = (state) => {
   if (!state) return;
   applyLanguage(state.language);
   toggleBtn.textContent = state.active
-    ? t(state.language, 'btnStop')
-    : t(state.language, 'btnStart');
+    ? AutoScrollT(state.language, 'btnStop')
+    : AutoScrollT(state.language, 'btnStart');
   speedRange.value = state.speed;
   speedNumber.value = state.speed;
   languageSelect.value = state.language;

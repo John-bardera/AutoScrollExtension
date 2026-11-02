@@ -6,6 +6,10 @@
 (() => {
   'use strict';
 
+  // chrome.scripting による再注入ガード(manifest 注入と二重になるのを防ぐ)。
+  if (window.__autoScrollInjected) return;
+  window.__autoScrollInjected = true;
+
   // --- 状態 ---------------------------------------------------------------
   let running = false;
   let speed = 60;        // px/s
@@ -88,7 +92,7 @@
     running = true;
     rafId = requestAnimationFrame(tick);
     sendToBackground({ type: 'SCROLL_STATE', active: true });
-    showOverlay(t(lang, 'overlayStart', { speed }));
+    showOverlay(AutoScrollT(lang, 'overlayStart', { speed }));
   };
 
   const stopScroll = () => {
@@ -100,7 +104,7 @@
     }
     residual = 0;
     sendToBackground({ type: 'SCROLL_STATE', active: false });
-    showOverlay(t(lang, 'overlayStop'));
+    showOverlay(AutoScrollT(lang, 'overlayStop'));
   };
 
   // --- メッセージ受信 ------------------------------------------------------
@@ -139,6 +143,6 @@
     speed = clampSpeed(speed + (e.key === 'ArrowUp' ? SPEED_ADJUST : -SPEED_ADJUST));
     // 永続化は background が SPEED_CHANGED で行う(書き込み二重化を避ける)。
     sendToBackground({ type: 'SPEED_CHANGED', speed });
-    showOverlay(t(lang, 'overlaySpeed', { speed }));
+    showOverlay(AutoScrollT(lang, 'overlaySpeed', { speed }));
   });
 })();
