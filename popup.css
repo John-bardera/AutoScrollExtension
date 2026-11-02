@@ -35,6 +35,15 @@ body {
   color: var(--fg);
 }
 
+.language-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+}
+
 .header {
   display: flex;
   align-items: center;

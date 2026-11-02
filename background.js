@@ -9,8 +9,11 @@ const SPEED_MIN = 10;
 const SPEED_MAX = 1000;
 const DEFAULT_SPEED = 60;
 const DEFAULT_BEHAVIOR = 'resume';
+const DEFAULT_LANGUAGE = 'ja';
 const SAVE_DEBOUNCE_MS = 300;   // storage.sync 書き込み制限対策
-const QUERY_TIMEOUT_MS = 200;    // content への実行状態問い合わせの猶予
+const QUERY_TIMEOUT_MS = 500;    // content への実行状態問い合わせの猶予(タブのスロトルを吸収)
+const START_RETRY_INTERVAL_MS = 300; // content 注入待ちの再送間隔
+const START_RETRY_MAX = 10;           // 再送回数(計約3秒)
 
 // content script が注入される(=トグルが機能する)URL スキーム。
 const SCROLLABLE_SCHEMES = ['http:', 'https:', 'file:'];
@@ -20,6 +23,7 @@ let active = false;        // スクロール実行中か(storage.session にミ
 let activeTabId = null;    // スクロール中のタブ ID(storage.session にミラー)
 let speed = DEFAULT_SPEED; // px/s(storage.sync から復元)
 let behavior = DEFAULT_BEHAVIOR; // 'resume' | 'pause'
+let language = DEFAULT_LANGUAGE; // 'ja' | 'en'
 
 // --- 初期化: SW 起動時に設定と実行状態を復元 ------------------------------------
 // GET_STATE 等の応答はこの Promise の完了を待つ(起動レース防止)。
@@ -29,11 +33,13 @@ const ready = (async () => {
       chrome.storage.sync.get({
         speed: DEFAULT_SPEED,
         tabSwitchBehavior: DEFAULT_BEHAVIOR,
+        language: DEFAULT_LANGUAGE,
       }),
       chrome.storage.session.get({ active: false, activeTabId: null }),
     ]);
     speed = sync.speed;
     behavior = sync.tabSwitchBehavior;
+    language = sync.language;
     active = session.active;
     activeTabId = session.activeTabId;
   } catch (_) {
@@ -101,11 +107,49 @@ const queryTabRunning = async (tabId) => {
 };
 
 // --- トグル ---------------------------------------------------------------------
-const startOnTab = (tabId) => {
-  sendToTab(tabId, { type: 'SCROLL_START', speed });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// SCROLL_START を送り、content の注入・開始を確認できなければ再送する。
+// onActivated が content script 注入(document_idle)より先に発火して
+// 「受信者なし」で握り潰される race をここで回収する。
+// 各試行でタブの URL を確認し、chrome:// 等の非スクロール可能なページと
+// 判明したら中断する(生成直後で URL が空・about:blank の場合は読み込み
+// 待ちとして再送を続ける)。
+const abortStart = () => {
+  active = false;
+  activeTabId = null;
+  persistSession();
+};
+
+const startOnTab = async (tabId) => {
   activeTabId = tabId;
   active = true;
   persistSession();
+  for (let attempt = 0; attempt <= START_RETRY_MAX; attempt++) {
+    if (!active || activeTabId !== tabId) return; // 停止/別タブへ移った
+    let tab = null;
+    try {
+      tab = await chrome.tabs.get(tabId);
+    } catch (_) {
+      return; // タブが閉じられた
+    }
+    const url = tab.url || '';
+    if (url.startsWith('chrome-extension://')) {
+      abortStart(); // 拡張自身の UI では開始しない
+      return;
+    }
+    // 生成直後のタブは URL が空または about:blank のことがあり、遷移を
+    // 待つ必要があるため pending 扱いとする。
+    if (url && url !== 'about:blank' && !isScrollableTab(tab)) {
+      abortStart(); // chrome:// 等では開始しない
+      return;
+    }
+    sendToTab(tabId, { type: 'SCROLL_START', speed });
+    await sleep(START_RETRY_INTERVAL_MS);
+    if (!active || activeTabId !== tabId) return;
+    if (await queryTabRunning(tabId)) return; // 開始を確認
+  }
+  // 確認できないまま期限切れ:状態は残す(ユーザーは Alt+S で停止可能)。
 };
 
 const stopScroll = () => {
@@ -125,7 +169,7 @@ const toggleScroll = async () => {
   if (await queryTabRunning(tab.id)) {
     stopScroll();
   } else {
-    startOnTab(tab.id);
+    await startOnTab(tab.id);
   }
 };
 
@@ -137,21 +181,54 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 // --- タブ追従 --------------------------------------------------------------------
-const handleTabChange = async (tabId) => {
+// タブまたはウィンドウのフォーカス移動の共通処理。
+// requireSameWindow: onActivated 経由では、スクロール中タブと同一ウィンドウの
+// 活性化のみを扱う。別ウィンドウのタブ活性化(拡張の popup ウィンドウ生成や
+// 他ウィンドウでのプログラマティックな切替)はフォーカスを伴わない可能性が
+// あり、フォーカス移動は onFocusChanged が別途処理するため無視する。
+const handleTabChange = async (tabId, requireSameWindow = false) => {
   await ready;
   if (!active) return;
   if (tabId === activeTabId) return; // 二重発火ガード
+
+  let tab = null;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch (_) {
+    return; // 取得できないタブ:何もしない
+  }
+
+  if (requireSameWindow && activeTabId !== null) {
+    let cur = null;
+    try {
+      cur = await chrome.tabs.get(activeTabId);
+    } catch (_) {
+      /* スクロール中タブが消えた場合は通常の経路へ */
+    }
+    if (cur && cur.windowId !== tab.windowId) return; // 別ウィンドウ:無視
+  }
+
   // 旧タブは必ず停止する。
   stopScroll();
   if (behavior === 'resume') {
-    // 新アクティブタブで即時に同速で再開。
-    startOnTab(tabId);
+    // 新アクティブタブで即時に同速で再開する。URL の判定(生成直後は空や
+    // about:blank のことがある)と注入待ちは startOnTab の再送ループが
+    // 行う:chrome:// 等と判明すれば中断、読み込み中なら待つ。
+    await startOnTab(tabId);
   }
-  // 'pause' の場合は一旦停止。Alt+S で再開できる。
+  // 'pause' の場合や非スクロール可能タブ(chrome:// 等)への移動は
+  // 一旦停止。Alt+S で再開できる。
 };
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
-  handleTabChange(tabId);
+  handleTabChange(tabId, true);
+});
+
+// スクロール中タブの再読み込み・遷移でも再開する(content が一度消えるため)。
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status !== 'complete') return;
+  if (!active || tabId !== activeTabId) return;
+  startOnTab(tabId); // 冪等(二重開始ガード)+ 注入待ち再送
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -181,7 +258,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 // --- メッセージ受信 ------------------------------------------------------------------
-const getState = () => ({ active, speed, behavior });
+const getState = () => ({ active, speed, behavior, language });
 
 // popup からの要求。戻り値で応答する。
 const handleCommand = async (msg) => {
@@ -208,6 +285,13 @@ const handleCommand = async (msg) => {
       if (msg.behavior === 'resume' || msg.behavior === 'pause') {
         behavior = msg.behavior;
         chrome.storage.sync.set({ tabSwitchBehavior: behavior }).catch(() => {});
+      }
+      return getState();
+
+    case 'SET_LANGUAGE':
+      if (msg.language === 'ja' || msg.language === 'en') {
+        language = msg.language;
+        chrome.storage.sync.set({ language }).catch(() => {});
       }
       return getState();
 
@@ -248,6 +332,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     msg.type === 'GET_STATE' ||
     msg.type === 'SET_SPEED' ||
     msg.type === 'SET_BEHAVIOR' ||
+    msg.type === 'SET_LANGUAGE' ||
     msg.type === 'TOGGLE'
   ) {
     (async () => {

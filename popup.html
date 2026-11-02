@@ -7,12 +7,12 @@
 </head>
 <body>
   <header class="header">
-    <h1>自動スクロール</h1>
-    <button id="toggle-btn" class="toggle-btn">開始</button>
+    <h1 data-i18n="title"></h1>
+    <button id="toggle-btn" class="toggle-btn"></button>
   </header>
 
   <section class="section">
-    <h2>速度</h2>
+    <h2 data-i18n="secSpeed"></h2>
     <div class="speed-row">
       <input id="speed-range" type="range" min="10" max="1000" step="10" />
       <input id="speed-number" type="number" min="10" max="1000" step="10" />
@@ -21,21 +21,28 @@
   </section>
 
   <section class="section">
-    <h2>タブ切替時の挙動</h2>
+    <h2 data-i18n="secBehavior"></h2>
     <label class="radio-row">
       <input type="radio" name="behavior" value="resume" />
-      <span>切り替え先でも同じ速度で続ける</span>
+      <span data-i18n="behaviorResume"></span>
     </label>
     <label class="radio-row">
       <input type="radio" name="behavior" value="pause" />
-      <span>切り替え先では停止する</span>
+      <span data-i18n="behaviorPause"></span>
     </label>
   </section>
 
-  <footer class="footer">
-    トグル: Alt+S(変更可)&nbsp;/&nbsp;速度調整: ↑↓(スクロール中)
-  </footer>
+  <section class="section">
+    <h2 data-i18n="secLanguage"></h2>
+    <select id="language-select" class="language-select">
+      <option value="ja">日本語</option>
+      <option value="en">English</option>
+    </select>
+  </section>
 
+  <footer class="footer" data-i18n="footer"></footer>
+
+  <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

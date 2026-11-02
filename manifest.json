@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto Scroll",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "長文読書のための自動スクロール拡張機能。Alt+S で ON/OFF、速度調整はポップアップまたは↑↓キー。",
   "permissions": ["storage", "tabs"],
   "background": {
@@ -10,7 +10,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["i18n.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
