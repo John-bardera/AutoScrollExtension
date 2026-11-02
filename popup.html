@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>Auto Scroll</title>
+</head>
+<body>
+  <header class="header">
+    <h1>自動スクロール</h1>
+    <button id="toggle-btn" class="toggle-btn">開始</button>
+  </header>
+
+  <section class="section">
+    <h2>速度</h2>
+    <div class="speed-row">
+      <input id="speed-range" type="range" min="10" max="1000" step="10" />
+      <input id="speed-number" type="number" min="10" max="1000" step="10" />
+      <span class="unit">px/s</span>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>タブ切替時の挙動</h2>
+    <label class="radio-row">
+      <input type="radio" name="behavior" value="resume" />
+      <span>切り替え先でも同じ速度で続ける</span>
+    </label>
+    <label class="radio-row">
+      <input type="radio" name="behavior" value="pause" />
+      <span>切り替え先では停止する</span>
+    </label>
+  </section>
+
+  <footer class="footer">
+    トグル: Alt+S(変更可)&nbsp;/&nbsp;速度調整: ↑↓(スクロール中)
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
