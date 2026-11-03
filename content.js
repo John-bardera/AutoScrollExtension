@@ -25,7 +25,7 @@
 
   // --- 言語 ---------------------------------------------------------------
   chrome.storage.sync
-    .get({ language: 'ja' })
+    .get({ language: 'en' })
     .then((items) => {
       lang = items.language;
     })

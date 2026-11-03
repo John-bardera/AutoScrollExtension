@@ -8,8 +8,7 @@
 const SPEED_MIN = 10;
 const SPEED_MAX = 1000;
 const DEFAULT_SPEED = 60;
-const DEFAULT_BEHAVIOR = 'resume';
-const DEFAULT_LANGUAGE = 'ja';
+const DEFAULT_LANGUAGE = 'en';
 const SAVE_DEBOUNCE_MS = 300;   // storage.sync 書き込み制限対策
 const QUERY_TIMEOUT_MS = 500;    // content への実行状態問い合わせの猶予(タブのスロトルを吸収)
 const START_RETRY_INTERVAL_MS = 300; // content 注入待ちの再送間隔
@@ -27,7 +26,6 @@ const diag = (...args) => console.debug('[AutoScroll]', ...args);
 let active = false;        // スクロール実行中か(storage.session にミラー)
 let activeTabId = null;    // スクロール中のタブ ID(storage.session にミラー)
 let speed = DEFAULT_SPEED; // px/s(storage.sync から復元)
-let behavior = DEFAULT_BEHAVIOR; // 'resume' | 'pause'
 let language = DEFAULT_LANGUAGE; // 'ja' | 'en'
 
 // --- 初期化: SW 起動時に設定と実行状態を復元 ------------------------------------
@@ -37,13 +35,11 @@ const ready = (async () => {
     const [sync, session] = await Promise.all([
       chrome.storage.sync.get({
         speed: DEFAULT_SPEED,
-        tabSwitchBehavior: DEFAULT_BEHAVIOR,
         language: DEFAULT_LANGUAGE,
       }),
       chrome.storage.session.get({ active: false, activeTabId: null }),
     ]);
     speed = sync.speed;
-    behavior = sync.tabSwitchBehavior;
     language = sync.language;
     active = session.active;
     activeTabId = session.activeTabId;
@@ -261,16 +257,12 @@ const handleTabChange = async (tabId, requireSameWindow = false) => {
   if (tab) {
     diag(`handleTabChange: 新タブ url=${tab.url || '(空)'}`);
   }
-  // 旧タブは必ず停止する。
+  // 旧タブは必ず停止し、新アクティブタブで即時に同速で再開する。
+  // URL の判定(生成直後は空や about:blank のことがある)と注入待ちは
+  // startOnTab の再送ループが行う:chrome:// 等と判明すれば中断、
+  // 読み込み中なら待つ。
   stopScroll();
-  if (behavior === 'resume') {
-    // 新アクティブタブで即時に同速で再開する。URL の判定(生成直後は空や
-    // about:blank のことがある)と注入待ちは startOnTab の再送ループが
-    // 行う:chrome:// 等と判明すれば中断、読み込み中なら待つ。
-    await startOnTab(tabId);
-  }
-  // 'pause' の場合や非スクロール可能タブ(chrome:// 等)への移動は
-  // 一旦停止。Alt+S で再開できる。
+  await startOnTab(tabId);
 };
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
@@ -312,7 +304,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 // --- メッセージ受信 ------------------------------------------------------------------
-const getState = () => ({ active, speed, behavior, language });
+const getState = () => ({ active, speed, language });
 
 // popup からの要求。戻り値で応答する。
 const handleCommand = async (msg) => {
@@ -332,13 +324,6 @@ const handleCommand = async (msg) => {
         if (active && activeTabId !== null) {
           sendToTab(activeTabId, { type: 'SCROLL_START', speed });
         }
-      }
-      return getState();
-
-    case 'SET_BEHAVIOR':
-      if (msg.behavior === 'resume' || msg.behavior === 'pause') {
-        behavior = msg.behavior;
-        chrome.storage.sync.set({ tabSwitchBehavior: behavior }).catch(() => {});
       }
       return getState();
 
@@ -385,7 +370,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (
     msg.type === 'GET_STATE' ||
     msg.type === 'SET_SPEED' ||
-    msg.type === 'SET_BEHAVIOR' ||
     msg.type === 'SET_LANGUAGE' ||
     msg.type === 'TOGGLE'
   ) {

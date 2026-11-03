@@ -14,9 +14,6 @@
       btnStart: '開始',
       btnStop: '停止',
       secSpeed: '速度',
-      secBehavior: 'タブ切替時の挙動',
-      behaviorResume: '切り替え先でも同じ速度で続ける',
-      behaviorPause: '切り替え先では停止する',
       secLanguage: '言語',
       footer: 'トグル: Alt+S(変更可)/ 速度調整: ↑↓(スクロール中)',
       overlayStart: '自動スクロール開始(速度: {speed} px/s)',
@@ -28,9 +25,6 @@
       btnStart: 'Start',
       btnStop: 'Stop',
       secSpeed: 'Speed',
-      secBehavior: 'On tab switch',
-      behaviorResume: 'Continue at the same speed in the new tab',
-      behaviorPause: 'Pause in the new tab',
       secLanguage: 'Language',
       footer: 'Toggle: Alt+S (configurable) / Speed: ↑↓ (while scrolling)',
       overlayStart: 'Auto scroll started (speed: {speed} px/s)',
@@ -39,10 +33,10 @@
     },
   };
 
-  // 翻訳取得。未対応言語・未知キーは日本語にフォールバックする。
+  // 翻訳取得。未対応言語・未知キーは英語にフォールバックする。
   window.AutoScrollT = (lang, key, vars = {}) => {
-    const cat = I18N[lang] || I18N.ja;
-    let text = cat[key] ?? I18N.ja[key] ?? key;
+    const cat = I18N[lang] || I18N.en;
+    let text = cat[key] ?? I18N.en[key] ?? key;
     for (const [k, v] of Object.entries(vars)) {
       text = text.split(`{${k}}`).join(String(v));
     }

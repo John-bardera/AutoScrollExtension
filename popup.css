@@ -110,19 +110,6 @@ h2 {
   font-size: 12px;
 }
 
-.radio-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.radio-row input {
-  accent-color: var(--accent);
-}
-
 .footer {
   padding-top: 8px;
   border-top: 1px solid var(--border);

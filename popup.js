@@ -8,7 +8,6 @@ const SPEED_MAX = 1000;
 const toggleBtn = document.getElementById('toggle-btn');
 const speedRange = document.getElementById('speed-range');
 const speedNumber = document.getElementById('speed-number');
-const behaviorRadios = document.querySelectorAll('input[name="behavior"]');
 const languageSelect = document.getElementById('language-select');
 
 const sendMessage = (msg) =>
@@ -45,9 +44,6 @@ const applyState = (state) => {
   speedRange.value = state.speed;
   speedNumber.value = state.speed;
   languageSelect.value = state.language;
-  for (const radio of behaviorRadios) {
-    radio.checked = radio.value === state.behavior;
-  }
 };
 
 const refresh = async () => {
@@ -74,17 +70,10 @@ speedNumber.addEventListener('change', async () => {
   applyState(await sendMessage({ type: 'SET_SPEED', speed }));
 });
 
-for (const radio of behaviorRadios) {
-  radio.addEventListener('change', async () => {
-    if (!radio.checked) return;
-    applyState(await sendMessage({ type: 'SET_BEHAVIOR', behavior: radio.value }));
-  });
-}
-
 languageSelect.addEventListener('change', async () => {
   applyState(await sendMessage({ type: 'SET_LANGUAGE', language: languageSelect.value }));
 });
 
 // --- 初期化 ------------------------------------------------------------------
-applyLanguage('ja'); // 状態取得前に一旦既定語で埋める(ちらつき防止)
+applyLanguage('en'); // 状態取得前に一旦既定語で埋める(ちらつき防止)
 refresh();
